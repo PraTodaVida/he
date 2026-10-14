@@ -103,13 +103,6 @@ details summary{cursor:pointer;color:var(--mut);font-family:Orbitron,sans-serif;
         <div class="lbl"><div class="pct" id="rPct">0%</div><div class="sub">próximo dia</div></div>
       </div>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="l">Faltam p/ próximo dia</div><div class="v" id="sFalta">–</div></div>
-      <div class="stat"><div class="l">Total contabilizado</div><div class="v" id="sTot">–</div></div>
-      <div class="stat"><div class="l">Trabalhado (real)</div><div class="v" id="sReal">–</div></div>
-      <div class="stat"><div class="l">Ganho c/ adicionais</div><div class="v" id="sAdc">–</div></div>
-    </div>
-    <div class="mut" id="pDet" style="margin-top:10px"></div>
   </div>
 
   <!-- LANÇAMENTO -->
@@ -123,16 +116,6 @@ details summary{cursor:pointer;color:var(--mut);font-family:Orbitron,sans-serif;
       <button class="pri" type="submit">Lançar</button>
     </form>
     <div class="msg" id="mLanc"></div>
-    <div class="mut">Saída menor que a entrada = virou a madrugada (conta para a data de entrada). Pode lançar vários intervalos no mesmo dia.</div>
-  </div>
-
-  <!-- DIAS -->
-  <div class="card">
-    <div class="bar"><h2 style="margin:0">Dias lançados</h2><span class="sp"></span>
-      <label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="iMes"></label>
-    </div>
-    <div style="height:10px"></div>
-    <div class="scroll"><table class="tbl" id="tDias"></table></div>
   </div>
 
   <!-- CONFIG -->
@@ -154,7 +137,7 @@ details summary{cursor:pointer;color:var(--mut);font-family:Orbitron,sans-serif;
       <div class="bar">
         <button id="bExp" type="button">Exportar backup (.json)</button>
         <label class="chk" style="padding:0"><button type="button" id="bImpBtn">Importar backup</button><input type="file" id="bImp" accept=".json,application/json" hidden></label>
-        <button id="bCsv" type="button">Exportar mês (.csv)</button>
+        <button id="bCsv" type="button">Exportar lançamentos (.csv)</button>
       </div>
       <p class="mut">Os dados ficam salvos só neste navegador/aparelho. Faça backup com frequência e importe no outro aparelho se quiser usar em mais de um.</p>
     </details>
@@ -220,33 +203,10 @@ function render(){
   const nDias = Math.floor(totalMin/J), resto = totalMin - nDias*J;
   document.getElementById("pDias").innerHTML = nDias+"<small>dias</small>";
   document.getElementById("pHoras").innerHTML = fmtH(resto)+"<small>h</small>";
-  document.getElementById("pDet").textContent =
-    `Jornada ${c.jornada.toLocaleString("pt-BR")} h/dia · saldo inicial ${c.diasBase} dias + ${fmtH(Math.round(c.horasBase*60))} h`;
-  sFalta.textContent = fmtH(J-resto)+" h";
-  sTot.textContent = fmtH(totalMin)+" h";
-  sReal.textContent = fmtH(totReal)+" h";
-  sAdc.textContent = "+"+fmtH(totLanc-totReal)+" h";
   const fr = resto/J; rPct.textContent = Math.floor(fr*100)+"%";
   ringArc.style.strokeDashoffset = (314.16*(1-fr)).toFixed(2);
 
   // mês
-  const mes = document.getElementById("iMes").value;
-  const dm = dias.filter(d=>d.data.startsWith(mes));
-  // tabela
-  const tb = document.getElementById("tDias");
-  if(!dm.length){ tb.innerHTML = `<tr><td class="mut">Nenhum lançamento neste mês.</td></tr>`; return; }
-  let h = `<tr><th>Data</th><th>Marcações</th><th class="n">Trabalhado</th><th class="n">Extra</th><th>Tipo</th><th class="n">Contabilizado</th></tr>`;
-  for(const d of [...dm].reverse()){
-    const ex = d.e50+d.e80+d.e100;
-    const tag = d.tipo==="util" ? (ex?`<span class="tag t50">${c.p50}%</span>`:"") :
-                d.tipo==="sab" ? `<span class="tag t80">${c.p80}%</span>` :
-                `<span class="tag t100">${c.p100}%${d.tipo==="fer"?" feriado":""}</span>`;
-    const marc = d.ls.map(l=>`${l.ent}–${l.sai}${toMin(l.sai)<=toMin(l.ent)?" (+1d)":""} <button class="del" title="Excluir" data-id="${l.id}">×</button>`).join("<br>");
-    h += `<tr><td>${fmtD(d.data)} <span class="mut">${DIAS[dow(d.data)]}</span></td><td>${marc}</td>
-      <td class="n">${fmtH(d.tot)}</td><td class="n">${ex?fmtH(ex):"–"}</td>
-      <td>${tag}</td><td class="n"><b>${fmtH(d.conta)}</b></td></tr>`;
-  }
-  tb.innerHTML = h;
 }
 
 function alertMsg(id,txt,err){ const e=document.getElementById(id); e.textContent=txt; e.className="msg "+(err?"err":"okm"); }
@@ -267,7 +227,6 @@ document.getElementById("fLanc").addEventListener("submit", ev=>{
   if(iFer.checked && f<0) st.feriados.push(data);
   if(!iFer.checked && f>=0) st.feriados.splice(f,1);
   save();
-  iMes.value = data.slice(0,7);
   render();
   alertMsg("mLanc",`Lançado ${fmtD(data)} ${ent}–${sai} (${fmtH(durMin(novo))} h).`);
   iEnt.value=""; iSai.value="";
@@ -275,15 +234,6 @@ document.getElementById("fLanc").addEventListener("submit", ev=>{
 });
 iData.addEventListener("change", ()=>{ iFer.checked = st.feriados.includes(iData.value); });
 
-document.getElementById("tDias").addEventListener("click", ev=>{
-  const id = ev.target.dataset && ev.target.dataset.id; if(!id) return;
-  const l = st.lanc.find(x=>x.id===id); if(!l) return;
-  if(!confirm(`Excluir ${fmtD(l.data)} ${l.ent}–${l.sai}?`)) return;
-  st.lanc = st.lanc.filter(x=>x.id!==id);
-  if(!st.lanc.some(x=>x.data===l.data)) st.feriados = st.feriados.filter(f=>f!==l.data);
-  save(); render();
-});
-iMes.addEventListener("change", render);
 
 function fillCfg(){ const c=st.cfg; cDias.value=c.diasBase; cHoras.value=c.horasBase; cJor.value=c.jornada; cMes.value=c.cargaMes; c50.value=c.p50; c80.value=c.p80; c100.value=c.p100; }
 document.getElementById("fCfg").addEventListener("submit", ev=>{
@@ -308,12 +258,12 @@ bImp.addEventListener("change", ()=>{
   r.readAsText(f);
 });
 bCsv.addEventListener("click", ()=>{
-  const mes=iMes.value, c=st.cfg;
+  const c=st.cfg;
   const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Contabilizado_h"]];
-  for(const d of porDia().filter(d=>d.data.startsWith(mes))){
+  for(const d of porDia()){
     rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(d.conta)]);
   }
-  baixar(`horas-extras-${mes}.csv`, "﻿"+rows.map(r=>r.map(x=>`"${x}"`).join(";")).join("\n"), "text/csv");
+  baixar(`horas-extras-${hojeISO()}.csv`, "﻿"+rows.map(r=>r.map(x=>`"${x}"`).join(";")).join("\n"), "text/csv");
 });
 
 // ---------- data de hoje ----------
@@ -321,7 +271,7 @@ let diaAtual = "";
 function hojeISO(){ const h=new Date(); return new Date(h.getTime()-h.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function setHoje(){
   diaAtual = hojeISO();
-  iData.value = diaAtual; iMes.value = diaAtual.slice(0,7);
+  iData.value = diaAtual;
   iFer.checked = st.feriados.includes(diaAtual);
   render();
 }
