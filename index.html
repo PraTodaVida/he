@@ -140,6 +140,11 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
         <div class="lbl"><div class="pct" id="rPct">0%</div><div class="sub">próximo dia</div></div>
       </div>
     </div>
+    <div class="stats">
+      <div class="stat"><div class="l">Abatido por falta</div><div class="v t100" id="pFalta">0,0 h</div></div>
+      <div class="stat"><div class="l">Dias úteis c/ falta</div><div class="v" id="pNFalta">0</div></div>
+      <div class="stat"><div class="l">Controle desde</div><div class="v" id="pIni">—</div></div>
+    </div>
   </div>
 
   <!-- LANÇAMENTO -->
@@ -147,12 +152,13 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
     <h2>Lançar marcação</h2>
     <form class="row" id="fLanc">
       <label class="f-data">Data<input type="date" id="iData" required></label>
-      <label class="f-hora">Entrada<input type="time" id="iEnt" required></label>
-      <label class="f-hora">Saída<input type="time" id="iSai" required></label>
+      <label class="f-hora">Entrada<input type="time" id="iEnt"></label>
+      <label class="f-hora">Saída<input type="time" id="iSai"></label>
       <label class="chk f-fer"><input type="checkbox" id="iFer"> Feriado (100%)</label>
       <button class="pri f-btn" type="submit">Lançar</button>
     </form>
     <div class="msg" id="mLanc"></div>
+    <p class="mut">Dia útil abaixo da jornada: as horas faltantes não são creditadas e ainda são abatidas do saldo. Dia útil sem marcação abate a jornada inteira. A falta só é aplicada após o dia terminar. Para feriado sem trabalho, marque "Feriado" e lance sem entrada/saída.</p>
     <div class="scroll lista"><table class="tbl" id="tDias"></table></div>
   </div>
 
@@ -169,6 +175,7 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
         <label>Seg–Sex extra (%)<input type="number" id="c50" min="0" step="1"></label>
         <label>Sábado (%)<input type="number" id="c80" min="0" step="1"></label>
         <label>Domingo/Feriado (%)<input type="number" id="c100" min="0" step="1"></label>
+        <label>Início do controle (abate faltas a partir de)<input type="date" id="cIni"></label>
         <button class="pri" type="submit">Salvar</button>
       </form>
       <div class="msg" id="mCfg"></div>
@@ -186,7 +193,7 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
 (function(){
 "use strict";
 const KEY = "rodopar_horas_extras_v1";
-const DEF = { cfg:{ diasBase:172, horasBase:0, jornada:8.8, cargaMes:220, p50:50, p80:80, p100:100 }, lanc:[], feriados:[] };
+const DEF = { cfg:{ diasBase:172, horasBase:0, jornada:8.8, cargaMes:220, p50:50, p80:80, p100:100, inicio:"" }, lanc:[], feriados:[] };
 
 let st;
 function load(){
@@ -194,6 +201,11 @@ function load(){
   if(!st || !st.cfg) st = JSON.parse(JSON.stringify(DEF));
   st.cfg = Object.assign({}, DEF.cfg, st.cfg);
   st.lanc = st.lanc || []; st.feriados = st.feriados || [];
+  if(!st.cfg.inicio){ // sem data de início: usa o primeiro lançamento (ou hoje) e grava
+    const ds = st.lanc.map(l=>l.data).sort();
+    st.cfg.inicio = ds[0] || hojeISO();
+    save();
+  }
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ alertMsg("mLanc","Não foi possível salvar no navegador. Exporte o backup.",true); } }
 
