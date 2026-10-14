@@ -140,11 +140,6 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
         <div class="lbl"><div class="pct" id="rPct">0%</div><div class="sub">próximo dia</div></div>
       </div>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="l">Abatido por falta</div><div class="v t100" id="pFalta">0,0 h</div></div>
-      <div class="stat"><div class="l">Dias úteis c/ falta</div><div class="v" id="pNFalta">0</div></div>
-      <div class="stat"><div class="l">Controle desde</div><div class="v" id="pIni">—</div></div>
-    </div>
   </div>
 
   <!-- LANÇAMENTO -->
@@ -157,9 +152,7 @@ button,input,label{-webkit-tap-highlight-color:transparent;touch-action:manipula
       <label class="chk f-fer"><input type="checkbox" id="iFer"> Feriado (100%)</label>
       <button class="pri f-btn" type="submit">Lançar</button>
     </form>
-    <div class="msg" id="mLanc"></div>
-    <p class="mut">Dia útil abaixo da jornada: as horas faltantes não são creditadas e ainda são abatidas do saldo. Dia útil sem marcação abate a jornada inteira. A falta só é aplicada após o dia terminar. Para feriado sem trabalho, marque "Feriado" e lance sem entrada/saída.</p>
-    <div class="scroll lista"><table class="tbl" id="tDias"></table></div>
+    <div class="msg" id="mLanc"></div>    <div class="scroll lista"><table class="tbl" id="tDias"></table></div>
   </div>
 
   <!-- CONFIG -->
@@ -224,21 +217,33 @@ function tipoDia(d){
 }
 
 // agrega por dia
+function addDia(d,n){ const x=new Date(d+"T12:00:00"); x.setDate(x.getDate()+n); return new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function porDia(){
   const m = {};
   for(const l of st.lanc){ (m[l.data] ||= []).push(l); }
+  for(const f of st.feriados){ m[f] ||= []; }
+  // dias úteis sem marcação, do início do controle até ontem
+  const hoje = hojeISO(), ini = st.cfg.inicio;
+  if(ini && ini < hoje){
+    for(let d=ini, i=0; d<hoje && i<4000; d=addDia(d,1), i++){ if(tipoDia(d)==="util") m[d] ||= []; }
+  }
   const out = [];
   for(const d of Object.keys(m).sort()){
     const ls = m[d].sort((a,b)=>a.ent.localeCompare(b.ent));
     const tot = ls.reduce((s,l)=>s+durMin(l),0);
     const t = tipoDia(d);
-    let normal=0, e50=0, e80=0, e100=0;
-    if(t==="util"){ normal=Math.min(tot,jorMin()); e50=Math.max(0,tot-jorMin()); }
+    let normal=0, e50=0, e80=0, e100=0, falta=0;
+    if(t==="util"){
+      normal=Math.min(tot,jorMin()); e50=Math.max(0,tot-jorMin());
+      // falta só após o dia terminar e dentro do período de controle
+      if(d<hoje && (!ini || d>=ini)) falta=Math.max(0,jorMin()-tot);
+    }
     else if(t==="sab"){ e80=tot; }
     else { e100=tot; }
     const c=st.cfg;
-    const conta = normal + e50*(1+c.p50/100) + e80*(1+c.p80/100) + e100*(1+c.p100/100);
-    out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100, conta});
+    // regra: horas faltantes não são creditadas E são abatidas do saldo
+    const conta = normal + e50*(1+c.p50/100) + e80*(1+c.p80/100) + e100*(1+c.p100/100) - falta;
+    out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100, falta, conta});
   }
   return out;
 }
@@ -250,9 +255,10 @@ function render(){
   const totLanc = dias.reduce((s,d)=>s+d.conta,0);
   const totReal = dias.reduce((s,d)=>s+d.tot,0);
   const totalMin = c.diasBase*J + Math.round(c.horasBase*60) + totLanc;
-  const nDias = Math.floor(totalMin/J), resto = totalMin - nDias*J;
-  document.getElementById("pDias").innerHTML = nDias+"<small>dias</small>";
-  document.getElementById("pHoras").innerHTML = fmtH(resto)+"<small>h</small>";
+  const neg = totalMin<0, absMin = Math.abs(totalMin), sg = neg?"-":"";
+  const nDias = Math.floor(absMin/J), resto = absMin - nDias*J;
+  document.getElementById("pDias").innerHTML = sg+nDias+"<small>dias</small>";
+  document.getElementById("pHoras").innerHTML = sg+fmtH(resto)+"<small>h</small>";
   const fr = resto/J; rPct.textContent = Math.floor(fr*100)+"%";
   ringArc.style.strokeDashoffset = (314.16*(1-fr)).toFixed(2);
   // lista de marcações
@@ -260,7 +266,9 @@ function render(){
   if(!dias.length){ tb.innerHTML = ""; return; }
   let h = `<tr><th>Data</th><th>Marcações</th></tr>`;
   for(const d of [...dias].reverse()){
-    const marc = d.ls.map(l=>`${l.ent}–${l.sai}${toMin(l.sai)<=toMin(l.ent)?" (+1d)":""} <button class="del" title="Excluir" data-id="${l.id}">×</button>`).join("<br>");
+    let marc = d.ls.map(l=>`${l.ent}–${l.sai}${toMin(l.sai)<=toMin(l.ent)?" (+1d)":""} <button class="del" title="Excluir" data-id="${l.id}">×</button>`).join("<br>");
+    if(!d.ls.length) marc = d.tipo==="fer" ? `<span class="mut">Feriado sem trabalho</span> <button class="del" title="Remover feriado" data-fer="${d.data}">×</button>` : `<span class="mut">Sem marcação</span>`;
+    if(d.falta>0) marc += `<br><span class="tag t100">-${fmtH(d.falta)} h abatido</span>`;
     h += `<tr><td>${fmtD(d.data)} <span class="mut">${DIAS[dow(d.data)]}</span></td><td>${marc}</td></tr>`;
   }
   tb.innerHTML = h;
@@ -274,7 +282,13 @@ function alertMsg(id,txt,err){ const e=document.getElementById(id); e.textConten
 document.getElementById("fLanc").addEventListener("submit", ev=>{
   ev.preventDefault();
   const data=iData.value, ent=iEnt.value, sai=iSai.value;
-  if(!data||!ent||!sai) return;
+  if(!data) return;
+  if(!ent && !sai){ // só marca/desmarca feriado sem trabalho
+    if(!iFer.checked){ alertMsg("mLanc","Informe entrada e saída (ou marque Feriado para registrar feriado sem trabalho).",true); return; }
+    if(!st.feriados.includes(data)) st.feriados.push(data);
+    save(); render(); alertMsg("mLanc",`Feriado registrado em ${fmtD(data)} (sem abatimento).`); return;
+  }
+  if(!ent||!sai){ alertMsg("mLanc","Informe entrada e saída.",true); return; }
   if(ent===sai){ alertMsg("mLanc","Entrada e saída iguais.",true); return; }
   const novo={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), data, ent, sai};
   // checa sobreposição no mesmo dia
@@ -294,12 +308,14 @@ document.getElementById("fLanc").addEventListener("submit", ev=>{
 iData.addEventListener("change", ()=>{ iFer.checked = st.feriados.includes(iData.value); });
 
 
-function fillCfg(){ const c=st.cfg; cDias.value=c.diasBase; cHoras.value=c.horasBase; cJor.value=c.jornada; cMes.value=c.cargaMes; c50.value=c.p50; c80.value=c.p80; c100.value=c.p100; }
+function fillCfg(){ const c=st.cfg; cDias.value=c.diasBase; cHoras.value=c.horasBase; cJor.value=c.jornada; cMes.value=c.cargaMes; c50.value=c.p50; c80.value=c.p80; c100.value=c.p100; cIni.value=c.inicio||""; }
 document.getElementById("fCfg").addEventListener("submit", ev=>{
   ev.preventDefault();
   const n = v => Number(String(v).replace(",","."));
   const c = { diasBase:n(cDias.value), horasBase:n(cHoras.value), jornada:n(cJor.value), cargaMes:n(cMes.value), p50:n(c50.value), p80:n(c80.value), p100:n(c100.value) };
   if(Object.values(c).some(v=>!isFinite(v)||v<0) || c.jornada<=0){ alertMsg("mCfg","Valores inválidos.",true); return; }
+  if(!cIni.value){ alertMsg("mCfg","Informe a data de início do controle.",true); return; }
+  c.inicio = cIni.value;
   st.cfg=c; save(); render(); alertMsg("mCfg","Configuração salva.");
 });
 
@@ -318,14 +334,17 @@ bImp.addEventListener("change", ()=>{
 });
 bCsv.addEventListener("click", ()=>{
   const c=st.cfg;
-  const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Contabilizado_h"]];
+  const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Falta_abatida_h","Contabilizado_h"]];
   for(const d of porDia()){
-    rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(d.conta)]);
+    rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(d.falta),fmtH(d.conta)]);
   }
   baixar(`horas-extras-${hojeISO()}.csv`, "﻿"+rows.map(r=>r.map(x=>`"${x}"`).join(";")).join("\n"), "text/csv");
 });
 
 document.getElementById("tDias").addEventListener("click", ev=>{
+  const fer = ev.target.dataset && ev.target.dataset.fer;
+  if(fer){ if(!confirm(`Remover feriado de ${fmtD(fer)}? O dia passará a ser abatido se for útil.`)) return;
+    st.feriados = st.feriados.filter(f=>f!==fer); save(); render(); return; }
   const id = ev.target.dataset && ev.target.dataset.id; if(!id) return;
   const l = st.lanc.find(x=>x.id===id); if(!l) return;
   if(!confirm(`Excluir ${fmtD(l.data)} ${l.ent}–${l.sai}?`)) return;
