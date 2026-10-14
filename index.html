@@ -241,8 +241,8 @@ function porDia(){
     else if(t==="sab"){ e80=tot; }
     else { e100=tot; }
     const c=st.cfg;
-    // regra: horas faltantes não são creditadas E são abatidas do saldo
-    const conta = normal + e50*(1+c.p50/100) + e80*(1+c.p80/100) + e100*(1+c.p100/100) - falta;
+    // só HE: jornada normal não soma; excedente entra com adicional; falta é descontada 1:1
+    const conta = e50*(1+c.p50/100) + e80*(1+c.p80/100) + e100*(1+c.p100/100) - falta;
     out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100, falta, conta});
   }
   return out;
