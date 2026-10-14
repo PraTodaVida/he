@@ -80,18 +80,12 @@ details summary{cursor:pointer;color:var(--mut)}
     <div class="mut">Saída menor que a entrada = virou a madrugada (conta para a data de entrada). Pode lançar vários intervalos no mesmo dia.</div>
   </div>
 
-  <!-- RESUMO DO MÊS -->
+  <!-- DIAS -->
   <div class="card">
-    <div class="bar"><h2 style="margin:0">Horas extras</h2><span class="sp"></span>
+    <div class="bar"><h2 style="margin:0">Dias lançados</h2><span class="sp"></span>
       <label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="iMes"></label>
     </div>
     <div style="height:10px"></div>
-    <div class="grid" id="gExtras"></div>
-  </div>
-
-  <!-- DIAS -->
-  <div class="card">
-    <h2>Dias lançados no mês</h2>
     <div class="scroll"><table class="tbl" id="tDias"></table></div>
   </div>
 
@@ -163,7 +157,9 @@ function porDia(){
     if(t==="util"){ normal=Math.min(tot,jorMin()); e50=Math.max(0,tot-jorMin()); }
     else if(t==="sab"){ e80=tot; }
     else { e100=tot; }
-    out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100});
+    const c=st.cfg;
+    const conta = normal + e50*(1+c.p50/100) + e80*(1+c.p80/100) + e100*(1+c.p100/100);
+    out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100, conta});
   }
   return out;
 }
@@ -172,44 +168,31 @@ function porDia(){
 function render(){
   const c = st.cfg, J = jorMin();
   const dias = porDia();
-  const totLanc = dias.reduce((s,d)=>s+d.tot,0);
+  const totLanc = dias.reduce((s,d)=>s+d.conta,0);
+  const totReal = dias.reduce((s,d)=>s+d.tot,0);
   const totalMin = c.diasBase*J + Math.round(c.horasBase*60) + totLanc;
   const nDias = Math.floor(totalMin/J), resto = totalMin - nDias*J;
   document.getElementById("pDias").innerHTML = nDias+"<small>dias</small>";
   document.getElementById("pHoras").innerHTML = fmtH(resto)+"<small>h</small>";
   document.getElementById("pDet").textContent =
-    `Total acumulado: ${fmtH(totalMin)} h (${fmtHM(totalMin)}) · jornada ${c.jornada.toLocaleString("pt-BR")} h/dia · saldo inicial ${c.diasBase} dias + ${fmtH(Math.round(c.horasBase*60))} h · faltam ${fmtH(J-resto)} h para o próximo dia`;
+    `Total contabilizado: ${fmtH(totalMin)} h · lançado: ${fmtH(totReal)} h trabalhadas = ${fmtH(totLanc)} h com adicionais · jornada ${c.jornada.toLocaleString("pt-BR")} h/dia · saldo inicial ${c.diasBase} dias + ${fmtH(Math.round(c.horasBase*60))} h · faltam ${fmtH(J-resto)} h para o próximo dia`;
 
   // mês
   const mes = document.getElementById("iMes").value;
   const dm = dias.filter(d=>d.data.startsWith(mes));
-  const s = k => dm.reduce((a,d)=>a+d[k],0);
-  const tot=s("tot"), e50=s("e50"), e80=s("e80"), e100=s("e100");
-  const q50=e50*(1+c.p50/100), q80=e80*(1+c.p80/100), q100=e100*(1+c.p100/100);
-  const ext = e50+e80+e100, eq = q50+q80+q100;
-  const k = (l,v,sub,cls="") => `<div class="kpi"><div class="l ${cls}">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
-  document.getElementById("gExtras").innerHTML =
-    k(`Extra ${c.p50}% (seg–sex)`, fmtH(e50)+" h", `${fmtHM(e50)} → equivale ${fmtH(q50)} h`, "t50") +
-    k(`Extra ${c.p80}% (sábado)`, fmtH(e80)+" h", `${fmtHM(e80)} → equivale ${fmtH(q80)} h`, "t80") +
-    k(`Extra ${c.p100}% (dom/feriado)`, fmtH(e100)+" h", `${fmtHM(e100)} → equivale ${fmtH(q100)} h`, "t100") +
-    k("Total extras (reais)", fmtH(ext)+" h", fmtHM(ext)) +
-    k("Total extras c/ adicional", fmtH(eq)+" h", "horas equivalentes a pagar") +
-    k(`Horas no mês / ${c.cargaMes} h`, fmtH(tot)+" h", `${dm.length} dia(s) lançado(s)`);
-
   // tabela
   const tb = document.getElementById("tDias");
   if(!dm.length){ tb.innerHTML = `<tr><td class="mut">Nenhum lançamento neste mês.</td></tr>`; return; }
-  let h = `<tr><th>Data</th><th>Marcações</th><th class="n">Total</th><th class="n">Normal</th><th class="n">Extra</th><th>Tipo</th><th class="n">Equiv.</th></tr>`;
+  let h = `<tr><th>Data</th><th>Marcações</th><th class="n">Trabalhado</th><th class="n">Extra</th><th>Tipo</th><th class="n">Contabilizado</th></tr>`;
   for(const d of [...dm].reverse()){
     const ex = d.e50+d.e80+d.e100;
-    const eqd = d.e50*(1+c.p50/100)+d.e80*(1+c.p80/100)+d.e100*(1+c.p100/100);
     const tag = d.tipo==="util" ? (ex?`<span class="tag t50">${c.p50}%</span>`:"") :
                 d.tipo==="sab" ? `<span class="tag t80">${c.p80}%</span>` :
                 `<span class="tag t100">${c.p100}%${d.tipo==="fer"?" feriado":""}</span>`;
     const marc = d.ls.map(l=>`${l.ent}–${l.sai}${toMin(l.sai)<=toMin(l.ent)?" (+1d)":""} <button class="del" title="Excluir" data-id="${l.id}">×</button>`).join("<br>");
     h += `<tr><td>${fmtD(d.data)} <span class="mut">${DIAS[dow(d.data)]}</span></td><td>${marc}</td>
-      <td class="n">${fmtH(d.tot)}</td><td class="n">${fmtH(d.normal)}</td><td class="n">${fmtH(ex)}</td>
-      <td>${tag}</td><td class="n">${ex?fmtH(eqd):"–"}</td></tr>`;
+      <td class="n">${fmtH(d.tot)}</td><td class="n">${ex?fmtH(ex):"–"}</td>
+      <td>${tag}</td><td class="n"><b>${fmtH(d.conta)}</b></td></tr>`;
   }
   tb.innerHTML = h;
 }
@@ -273,10 +256,9 @@ bImp.addEventListener("change", ()=>{
 });
 bCsv.addEventListener("click", ()=>{
   const mes=iMes.value, c=st.cfg;
-  const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Equivalente_h"]];
+  const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Contabilizado_h"]];
   for(const d of porDia().filter(d=>d.data.startsWith(mes))){
-    const eq=d.e50*(1+c.p50/100)+d.e80*(1+c.p80/100)+d.e100*(1+c.p100/100);
-    rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(eq)]);
+    rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(d.conta)]);
   }
   baixar(`horas-extras-${mes}.csv`, "﻿"+rows.map(r=>r.map(x=>`"${x}"`).join(";")).join("\n"), "text/csv");
 });
