@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle de Horas Extras</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#fff; --tx:#1c2430; --mut:#5f6b7a; --bd:#dde2e8;
+  --pri:#1f5fa8; --pri-tx:#fff; --ok:#1d7a46; --warn:#b26a00; --bad:#b3261e;
+  --c50:#1f5fa8; --c80:#b26a00; --c100:#b3261e;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#12161c; --card:#1b2129; --tx:#e6eaf0; --mut:#9aa6b4; --bd:#2c3540;
+    --pri:#5b9be0; --pri-tx:#0d1117; --ok:#4cc184; --warn:#e3a43c; --bad:#ef6b62;
+    --c50:#5b9be0; --c80:#e3a43c; --c100:#ef6b62; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 14px}
+h2{font-size:15px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:14px}
+.hero{display:flex;flex-wrap:wrap;gap:18px;align-items:baseline}
+.big{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums}
+.big small{font-size:18px;font-weight:500;color:var(--mut);margin-left:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--bd);border-radius:8px;padding:10px}
+.kpi .l{font-size:12px;color:var(--mut)}
+.kpi .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--mut)}
+form.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:4px}
+input,select{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:8px;min-width:0}
+input[type=checkbox]{width:18px;height:18px}
+.chk{flex-direction:row;align-items:center;gap:6px;padding-bottom:8px;font-size:14px;color:var(--tx)}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:6px;padding:8px 12px;cursor:pointer}
+button.pri{background:var(--pri);color:var(--pri-tx);border-color:var(--pri);font-weight:600}
+button.del{color:var(--bad);padding:2px 8px}
+.tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tbl th,.tbl td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
+.tbl th{font-size:12px;color:var(--mut);font-weight:600}
+.tbl td.n,.tbl th.n{text-align:right}
+.scroll{overflow-x:auto}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;border:1px solid currentColor}
+.t50{color:var(--c50)} .t80{color:var(--c80)} .t100{color:var(--c100)}
+.mut{color:var(--mut);font-size:12px}
+.msg{font-size:13px;margin-top:8px;min-height:18px}
+.err{color:var(--bad)} .okm{color:var(--ok)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sp{flex:1}
+details summary{cursor:pointer;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Controle de Horas Extras</h1>
+
+  <!-- PAINEL -->
+  <div class="card">
+    <h2>Painel</h2>
+    <div class="hero">
+      <div class="big" id="pDias">0<small>dias</small></div>
+      <div class="big" id="pHoras">0,0<small>h</small></div>
+    </div>
+    <div class="mut" id="pDet"></div>
+  </div>
+
+  <!-- LANÇAMENTO -->
+  <div class="card">
+    <h2>Lançar marcação</h2>
+    <form class="row" id="fLanc">
+      <label>Data<input type="date" id="iData" required></label>
+      <label>Entrada<input type="time" id="iEnt" required></label>
+      <label>Saída<input type="time" id="iSai" required></label>
+      <label class="chk"><input type="checkbox" id="iFer"> Feriado (100%)</label>
+      <button class="pri" type="submit">Lançar</button>
+    </form>
+    <div class="msg" id="mLanc"></div>
+    <div class="mut">Saída menor que a entrada = virou a madrugada (conta para a data de entrada). Pode lançar vários intervalos no mesmo dia.</div>
+  </div>
+
+  <!-- RESUMO DO MÊS -->
+  <div class="card">
+    <div class="bar"><h2 style="margin:0">Horas extras</h2><span class="sp"></span>
+      <label style="flex-direction:row;align-items:center;gap:6px">Mês <input type="month" id="iMes"></label>
+    </div>
+    <div style="height:10px"></div>
+    <div class="grid" id="gExtras"></div>
+  </div>
+
+  <!-- DIAS -->
+  <div class="card">
+    <h2>Dias lançados no mês</h2>
+    <div class="scroll"><table class="tbl" id="tDias"></table></div>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="card">
+    <details>
+      <summary>Configuração e backup</summary>
+      <div style="height:10px"></div>
+      <form class="row" id="fCfg">
+        <label>Dias trabalhados (saldo inicial)<input type="number" id="cDias" min="0" step="1"></label>
+        <label>Horas além dos dias (saldo inicial)<input type="number" id="cHoras" min="0" step="0.1"></label>
+        <label>Jornada diária (h)<input type="number" id="cJor" min="1" step="0.1"></label>
+        <label>Carga mensal (h)<input type="number" id="cMes" min="1" step="1"></label>
+        <label>Seg–Sex extra (%)<input type="number" id="c50" min="0" step="1"></label>
+        <label>Sábado (%)<input type="number" id="c80" min="0" step="1"></label>
+        <label>Domingo/Feriado (%)<input type="number" id="c100" min="0" step="1"></label>
+        <button class="pri" type="submit">Salvar</button>
+      </form>
+      <div class="msg" id="mCfg"></div>
+      <div class="bar">
+        <button id="bExp" type="button">Exportar backup (.json)</button>
+        <label class="chk" style="padding:0"><button type="button" id="bImpBtn">Importar backup</button><input type="file" id="bImp" accept=".json,application/json" hidden></label>
+        <button id="bCsv" type="button">Exportar mês (.csv)</button>
+      </div>
+      <p class="mut">Os dados ficam salvos só neste navegador/aparelho. Faça backup com frequência e importe no outro aparelho se quiser usar em mais de um.</p>
+    </details>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const KEY = "rodopar_horas_extras_v1";
+const DEF = { cfg:{ diasBase:172, horasBase:0, jornada:8.8, cargaMes:220, p50:50, p80:80, p100:100 }, lanc:[], feriados:[] };
+
+let st;
+function load(){
+  try{ const r = localStorage.getItem(KEY); st = r ? JSON.parse(r) : null; }catch(e){ st = null; }
+  if(!st || !st.cfg) st = JSON.parse(JSON.stringify(DEF));
+  st.cfg = Object.assign({}, DEF.cfg, st.cfg);
+  st.lanc = st.lanc || []; st.feriados = st.feriados || [];
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ alertMsg("mLanc","Não foi possível salvar no navegador. Exporte o backup.",true); } }
+
+// ---------- utilitários (tudo em minutos inteiros p/ evitar erro de arredondamento) ----------
+const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+const jorMin = () => Math.round(st.cfg.jornada*60);
+const fmtH = min => (min/60).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:2});
+const fmtHM = min => { const s = min<0?"-":""; min=Math.abs(Math.round(min)); return s+String(Math.floor(min/60)).padStart(2,"0")+":"+String(min%60).padStart(2,"0"); };
+const DIAS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const dow = d => new Date(d+"T12:00:00").getDay();
+const fmtD = d => d.split("-").reverse().join("/");
+function durMin(l){ let a=toMin(l.ent), b=toMin(l.sai); if(b<=a) b+=1440; return b-a; }
+function tipoDia(d){
+  if(st.feriados.includes(d)) return "fer";
+  const w = dow(d); return w===0?"dom":(w===6?"sab":"util");
+}
+
+// agrega por dia
+function porDia(){
+  const m = {};
+  for(const l of st.lanc){ (m[l.data] ||= []).push(l); }
+  const out = [];
+  for(const d of Object.keys(m).sort()){
+    const ls = m[d].sort((a,b)=>a.ent.localeCompare(b.ent));
+    const tot = ls.reduce((s,l)=>s+durMin(l),0);
+    const t = tipoDia(d);
+    let normal=0, e50=0, e80=0, e100=0;
+    if(t==="util"){ normal=Math.min(tot,jorMin()); e50=Math.max(0,tot-jorMin()); }
+    else if(t==="sab"){ e80=tot; }
+    else { e100=tot; }
+    out.push({data:d, ls, tot, tipo:t, normal, e50, e80, e100});
+  }
+  return out;
+}
+
+// ---------- render ----------
+function render(){
+  const c = st.cfg, J = jorMin();
+  const dias = porDia();
+  const totLanc = dias.reduce((s,d)=>s+d.tot,0);
+  const totalMin = c.diasBase*J + Math.round(c.horasBase*60) + totLanc;
+  const nDias = Math.floor(totalMin/J), resto = totalMin - nDias*J;
+  document.getElementById("pDias").innerHTML = nDias+"<small>dias</small>";
+  document.getElementById("pHoras").innerHTML = fmtH(resto)+"<small>h</small>";
+  document.getElementById("pDet").textContent =
+    `Total acumulado: ${fmtH(totalMin)} h (${fmtHM(totalMin)}) · jornada ${c.jornada.toLocaleString("pt-BR")} h/dia · saldo inicial ${c.diasBase} dias + ${fmtH(Math.round(c.horasBase*60))} h · faltam ${fmtH(J-resto)} h para o próximo dia`;
+
+  // mês
+  const mes = document.getElementById("iMes").value;
+  const dm = dias.filter(d=>d.data.startsWith(mes));
+  const s = k => dm.reduce((a,d)=>a+d[k],0);
+  const tot=s("tot"), e50=s("e50"), e80=s("e80"), e100=s("e100");
+  const q50=e50*(1+c.p50/100), q80=e80*(1+c.p80/100), q100=e100*(1+c.p100/100);
+  const ext = e50+e80+e100, eq = q50+q80+q100;
+  const k = (l,v,sub,cls="") => `<div class="kpi"><div class="l ${cls}">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  document.getElementById("gExtras").innerHTML =
+    k(`Extra ${c.p50}% (seg–sex)`, fmtH(e50)+" h", `${fmtHM(e50)} → equivale ${fmtH(q50)} h`, "t50") +
+    k(`Extra ${c.p80}% (sábado)`, fmtH(e80)+" h", `${fmtHM(e80)} → equivale ${fmtH(q80)} h`, "t80") +
+    k(`Extra ${c.p100}% (dom/feriado)`, fmtH(e100)+" h", `${fmtHM(e100)} → equivale ${fmtH(q100)} h`, "t100") +
+    k("Total extras (reais)", fmtH(ext)+" h", fmtHM(ext)) +
+    k("Total extras c/ adicional", fmtH(eq)+" h", "horas equivalentes a pagar") +
+    k(`Horas no mês / ${c.cargaMes} h`, fmtH(tot)+" h", `${dm.length} dia(s) lançado(s)`);
+
+  // tabela
+  const tb = document.getElementById("tDias");
+  if(!dm.length){ tb.innerHTML = `<tr><td class="mut">Nenhum lançamento neste mês.</td></tr>`; return; }
+  let h = `<tr><th>Data</th><th>Marcações</th><th class="n">Total</th><th class="n">Normal</th><th class="n">Extra</th><th>Tipo</th><th class="n">Equiv.</th></tr>`;
+  for(const d of [...dm].reverse()){
+    const ex = d.e50+d.e80+d.e100;
+    const eqd = d.e50*(1+c.p50/100)+d.e80*(1+c.p80/100)+d.e100*(1+c.p100/100);
+    const tag = d.tipo==="util" ? (ex?`<span class="tag t50">${c.p50}%</span>`:"") :
+                d.tipo==="sab" ? `<span class="tag t80">${c.p80}%</span>` :
+                `<span class="tag t100">${c.p100}%${d.tipo==="fer"?" feriado":""}</span>`;
+    const marc = d.ls.map(l=>`${l.ent}–${l.sai}${toMin(l.sai)<=toMin(l.ent)?" (+1d)":""} <button class="del" title="Excluir" data-id="${l.id}">×</button>`).join("<br>");
+    h += `<tr><td>${fmtD(d.data)} <span class="mut">${DIAS[dow(d.data)]}</span></td><td>${marc}</td>
+      <td class="n">${fmtH(d.tot)}</td><td class="n">${fmtH(d.normal)}</td><td class="n">${fmtH(ex)}</td>
+      <td>${tag}</td><td class="n">${ex?fmtH(eqd):"–"}</td></tr>`;
+  }
+  tb.innerHTML = h;
+}
+
+function alertMsg(id,txt,err){ const e=document.getElementById(id); e.textContent=txt; e.className="msg "+(err?"err":"okm"); }
+
+// ---------- eventos ----------
+document.getElementById("fLanc").addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const data=iData.value, ent=iEnt.value, sai=iSai.value;
+  if(!data||!ent||!sai) return;
+  if(ent===sai){ alertMsg("mLanc","Entrada e saída iguais.",true); return; }
+  const novo={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), data, ent, sai};
+  // checa sobreposição no mesmo dia
+  const a=toMin(ent), b=a+durMin(novo);
+  const conflito = st.lanc.some(l=>{ if(l.data!==data) return false; const x=toMin(l.ent), y=x+durMin(l); return a<y && x<b; });
+  if(conflito){ alertMsg("mLanc","Esse intervalo se sobrepõe a outro lançamento do mesmo dia.",true); return; }
+  st.lanc.push(novo);
+  const f = st.feriados.indexOf(data);
+  if(iFer.checked && f<0) st.feriados.push(data);
+  if(!iFer.checked && f>=0) st.feriados.splice(f,1);
+  save();
+  iMes.value = data.slice(0,7);
+  render();
+  alertMsg("mLanc",`Lançado ${fmtD(data)} ${ent}–${sai} (${fmtH(durMin(novo))} h).`);
+  iEnt.value=""; iSai.value="";
+});
+iData.addEventListener("change", ()=>{ iFer.checked = st.feriados.includes(iData.value); });
+
+document.getElementById("tDias").addEventListener("click", ev=>{
+  const id = ev.target.dataset && ev.target.dataset.id; if(!id) return;
+  const l = st.lanc.find(x=>x.id===id); if(!l) return;
+  if(!confirm(`Excluir ${fmtD(l.data)} ${l.ent}–${l.sai}?`)) return;
+  st.lanc = st.lanc.filter(x=>x.id!==id);
+  if(!st.lanc.some(x=>x.data===l.data)) st.feriados = st.feriados.filter(f=>f!==l.data);
+  save(); render();
+});
+iMes.addEventListener("change", render);
+
+function fillCfg(){ const c=st.cfg; cDias.value=c.diasBase; cHoras.value=c.horasBase; cJor.value=c.jornada; cMes.value=c.cargaMes; c50.value=c.p50; c80.value=c.p80; c100.value=c.p100; }
+document.getElementById("fCfg").addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const n = v => Number(String(v).replace(",","."));
+  const c = { diasBase:n(cDias.value), horasBase:n(cHoras.value), jornada:n(cJor.value), cargaMes:n(cMes.value), p50:n(c50.value), p80:n(c80.value), p100:n(c100.value) };
+  if(Object.values(c).some(v=>!isFinite(v)||v<0) || c.jornada<=0){ alertMsg("mCfg","Valores inválidos.",true); return; }
+  st.cfg=c; save(); render(); alertMsg("mCfg","Configuração salva.");
+});
+
+function baixar(nome, txt, tipo){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([txt],{type:tipo})); a.download=nome; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+bExp.addEventListener("click", ()=> baixar(`horas-extras-backup-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(st,null,2), "application/json"));
+bImpBtn.addEventListener("click", ()=> bImp.click());
+bImp.addEventListener("change", ()=>{
+  const f=bImp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d.cfg||!Array.isArray(d.lanc)) throw 0;
+      if(!confirm("Substituir todos os dados atuais pelo backup?")) return;
+      st={ cfg:Object.assign({},DEF.cfg,d.cfg), lanc:d.lanc, feriados:d.feriados||[] };
+      save(); fillCfg(); render(); alertMsg("mCfg","Backup importado.");
+    }catch(e){ alertMsg("mCfg","Arquivo de backup inválido.",true); } bImp.value=""; };
+  r.readAsText(f);
+});
+bCsv.addEventListener("click", ()=>{
+  const mes=iMes.value, c=st.cfg;
+  const rows=[["Data","Dia","Marcacoes","Total_h","Normal_h","Extra50_h","Extra80_h","Extra100_h","Equivalente_h"]];
+  for(const d of porDia().filter(d=>d.data.startsWith(mes))){
+    const eq=d.e50*(1+c.p50/100)+d.e80*(1+c.p80/100)+d.e100*(1+c.p100/100);
+    rows.push([fmtD(d.data),DIAS[dow(d.data)],d.ls.map(l=>l.ent+"-"+l.sai).join(" | "),fmtH(d.tot),fmtH(d.normal),fmtH(d.e50),fmtH(d.e80),fmtH(d.e100),fmtH(eq)]);
+  }
+  baixar(`horas-extras-${mes}.csv`, "﻿"+rows.map(r=>r.map(x=>`"${x}"`).join(";")).join("\n"), "text/csv");
+});
+
+// ---------- init ----------
+load();
+const hoje = new Date(); const iso = new Date(hoje.getTime()-hoje.getTimezoneOffset()*60000).toISOString();
+iData.value = iso.slice(0,10); iMes.value = iso.slice(0,7);
+iFer.checked = st.feriados.includes(iData.value);
+fillCfg(); render();
+})();
+</script>
+</body>
+</html>
